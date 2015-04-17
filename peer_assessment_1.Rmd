@@ -1,0 +1,139 @@
+---
+title: "Data Analysis report"
+output: html_document
+---
+
+This is a report for data analysis assignement given for the reproducible reseatch course.
+Begin by loading the data to be used. First unzip the data then load it:
+```{r chunk1:unzip data}
+setwd("~/Coursera/RepData_PeerAssessment1")
+unzip("~/Coursera/RepData_PeerAssessment1/activity.zip")
+activity <- read.csv("activity.csv")
+
+```
+
+
+View the data
+
+```{r chunk2}
+str(activity)
+```
+
+## What is the total number of steps taken per day?
+
+```{r, echo=FALSE}
+daily.steps<-with(na.omit(activity),aggregate(steps,by=list(date),sum))
+colnames(daily.steps) <-c("date","steps")
+daily.steps[1:8,]
+```
+The following histogram shows the total number of steps raken each day.
+```{r}
+library(ggplot2)
+ggplot(daily.steps, aes(x=steps)) +
+    geom_histogram(fill="brown",binwidth=800) +
+    labs(title="Histogram of daily steps",
+         x = "Number of steps per day",y="Number of times in a day") + theme_bw()
+```
+
+```{r, echo=FALSE}
+mns1<-with(daily.steps, mean(steps,na.rm=TRUE))
+mdn1<-with(daily.steps, median(steps,na.rm=TRUE))
+
+```
+
+The mean total number of steps taken  per day is `r mns1`
+
+The median total number of steps taken  per day is `r mdn1`
+
+
+## What is the average daily activity pattern?
+```{r, echo=FALSE}
+#Aggregate the steps per interval.
+i.activity <- with(na.omit(activity),aggregate(steps,by=list(interval),mean))
+colnames(i.activity)<- c("interval","steps")
+#View the first ones
+i.activity[1:6,]
+#Which interval had the maxiumum daily steps?
+max.i <-i.activity[,1][which(i.activity[,2]==max(i.activity[,2]))]
+```
+Averaged daily steps of the 5-minute interval time series plot.
+``` {r, echo=FALSE}
+with(i.activity, plot(interval,steps,type="l",col="red",lty=2,ylab="Average daily steps",xlab="5-minute interval"))
+```
+
+The `r max.i`-th 5-min interval contains the maximum number of steps.
+
+## Imputing missing values
+First compute the number of rows with steps coded as NA
+```{r, echo=TRUE}
+#number of rows with NA steps
+act.na<-nrow(subset(activity,activity$steps!=is.na(activity$steps))) 
+```
+There are `r act.na` rows with NA steps values.
+
+##Imputation strategy
+I will use median because there are so many zeroes for that interval to fill in the missing values and keeping it simple
+
+```{r}
+uint <- unique(activity$interval)
+activity.imp <-NULL
+for (k in 1:length(uint)){
+activity.u <- subset(activity, activity$interval==uint[k])
+before<-activity.u$steps[1:20]#before impuatation
+activity.u$steps<-ifelse(is.na(activity.u$steps),median(na.omit(activity.u$steps)),activity.u$steps)
+activity.imp<-rbind(activity.imp,activity.u)
+}
+after<-activity.u$steps[1:20]#after imputation
+#show before and after
+cbind(before,after)[1:10,]
+
+```
+
+### Histogram for the imputed data, mean and median
+The following histogram shows the total number of steps taken each day.
+
+```{r}
+daily.steps<-with(activity.imp,aggregate(steps,by=list(date),sum))
+colnames(daily.steps) <-c("date","steps")
+library(ggplot2)
+ggplot(daily.steps, aes(x=steps)) +
+    geom_histogram(fill="purple",binwidth=800) +
+    labs(title="Histogram of daily steps",
+         x = "Number of steps per day",y="Number of times in a day") + theme_bw()
+
+mns2<-round(with(daily.steps, mean(steps,na.rm=TRUE)),2)
+mdn2<-with(daily.steps, median(steps,na.rm=TRUE))
+```
+The mean total number of steps taken  per day after imputation is `r mns2`
+The median total number of steps taken  per day is imputation is `r mdn2`
+
+After imputing the missing data the estimated for mean has been reduced from `r mns1` to `r mns2` and similarly for median lowered from `r mdn1` to `r mdn2`
+
+## Are there differences for activity between weekedays and weekends?
+As we see from the time series plot for the weekdays there are more activity steps with peaks above  100.
+While for weekends we have one peak which is way off the maximum peaks during weekdays. This will indicates the maximum  activity occured in an inerval falling on a weekend, but after it the rest are generally much lower than for the weekdays.
+```{r}
+library(lattice)
+activity$date <- as.Date(activity$date)
+activity$wday<-weekdays(activity$date)
+activity$wday <-ifelse(substr(activity$wday,1,1)=="S","weekend","weekday")
+par(mfrow=c(1,2))
+#subset and aggregate steps for weekdays
+wk.day<- subset(activity,activity$wday=="weekend")
+colnames(wk.day) <- c("steps","date","interval","wkday")
+wk.day<-with(na.omit(wk.day),aggregate(steps,by=list(interval),mean))
+
+
+#with(wk.day, plot(steps,interval,type="l",col="red",lty=1,ylab="Average daily steps",xlab="5-minute interval",main="Weekdays"))
+#subset and aggregate steps for weekend
+wkend<- subset(activity,activity$wday!="weekend")
+colnames(wkend) <- c("steps","date","interval","wkday")
+wkend<-with(na.omit(wkend),aggregate(steps,by=list(interval),mean))
+wkd<-cbind("weekday",wk.day);wek<-cbind("weekend",wkend)
+colnames(wkd)<-c("day","steps","interval")
+colnames(wek)<-c("day","steps","interval")
+
+
+with(rbind(wkd,wek),xyplot(interval~steps|day,type="l"))
+```
+
